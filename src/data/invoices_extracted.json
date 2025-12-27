@@ -15,5 +15,55 @@
     },
     "confidence": 0.78,
     "rawText": "Rechnungsnr: INV-2024-001\nLeistungsdatum: 01.01.2024"
+  },
+
+  {
+    "invoiceId": "INV-A-002",
+    "vendor": "Supplier GmbH",
+    "fields": {
+      "invoiceNumber": "INV-2024-002",
+      "invoiceDate": "18.01.2024",
+      "serviceDate": null,
+      "currency": "EUR",
+      "netTotal": 1000.0,
+      "taxRate": 0.19,
+      "taxTotal": 190.0,
+      "grossTotal": 1190.0,
+      "lineItems": [{ "sku": "WIDGET-001", "qty": 40, "unitPrice": 25.0 }]
+    },
+    "confidence": 0.82,
+    "rawText": "Rechnungsnr: INV-2024-002\nLeistungsdatum: 15.01.2024"
+  },
+  {
+    "invoiceId": "INV-B-001",
+    "vendor": "Parts AG",
+    "fields": {
+      "invoiceNumber": "PA-7781",
+      "invoiceDate": "05-02-2024",
+      "currency": "EUR",
+      "netTotal": 2000.0,
+      "taxRate": 0.19,
+      "taxTotal": 400.0,
+      "grossTotal": 2400.0,
+      "lineItems": [{ "sku": "BOLT-99", "qty": 200, "unitPrice": 10.0 }]
+    },
+    "confidence": 0.74,
+    "rawText": "VAT already included in total"
+  },
+  {
+    "invoiceId": "INV-B-002",
+    "vendor": "Parts AG",
+    "fields": {
+      "invoiceNumber": "PA-7782",
+      "invoiceDate": "12-02-2024",
+      "currency": "EUR",
+      "netTotal": 1500.0,
+      "taxRate": 0.19,
+      "taxTotal": 285.0,
+      "grossTotal": 1785.0,
+      "lineItems": [{ "sku": "BOLT-99", "qty": 150, "unitPrice": 10.0 }]
+    },
+    "confidence": 0.76,
+    "rawText": "Prices incl. VAT"
   }
 ]

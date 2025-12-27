@@ -15,6 +15,7 @@ export interface CorrectionMemory {
   field: string;
   pattern: string;
   correction: string;
+  source: "human" | "system";
   confidence: MemoryConfidence;
   usageCount: number;
   updatedAt: string;

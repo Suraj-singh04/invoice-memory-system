@@ -1,0 +1,12 @@
+[
+  {
+    "invoiceId": "INV-B-001",
+    "field": "taxTotal",
+    "approved": true
+  },
+  {
+    "invoiceId": "INV-A-002",
+    "field": "serviceDate",
+    "approved": false
+  }
+]
