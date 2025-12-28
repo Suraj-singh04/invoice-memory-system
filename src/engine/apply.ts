@@ -1,5 +1,6 @@
 import { MemoryStore } from "../memory/store";
 import { Invoice } from "../types/invoice";
+import { decideFromConfidence } from "./decide";
 import { v4 as uuid } from "uuid";
 
 export function applyAndLearn(invoice: Invoice) {
@@ -11,40 +12,59 @@ export function applyAndLearn(invoice: Invoice) {
   const proposedCorrections: string[] = [];
   const memoryUpdates: string[] = [];
 
+  // ============================================
+  // 1️⃣ VENDOR MEMORY — serviceDate
+  // ============================================
+
   const vendorRule = db.vendors.find(
     (m) =>
       m.vendor === invoice.vendor && m.key === "serviceDateFromLeistungsdatum"
   );
 
-  // Use memory first
-  if (vendorRule && !normalized.serviceDate && invoice.rawText) {
+  if (vendorRule && invoice.rawText) {
+    const decision = decideFromConfidence(vendorRule.confidence);
+
     const match = invoice.rawText.match(
       /Leistungsdatum\s*[:\-]?\s*([\d./-]+)/i
     );
 
     if (match) {
-      normalized.serviceDate = match[1];
+      const learnedDate = match[1];
 
-      proposedCorrections.push(
-        `serviceDate auto-filled using learned vendor memory (${match[1]})`
-      );
+      if (decision === "auto_apply" && !normalized.serviceDate) {
+        normalized.serviceDate = learnedDate;
 
-      vendorRule.usageCount += 1;
-      vendorRule.confidence = Math.min(1, vendorRule.confidence + 0.05);
+        proposedCorrections.push(
+          `AUTO — serviceDate set using vendor memory (${learnedDate})`
+        );
 
-      memoryUpdates.push(
-        "Reinforced vendor memory: serviceDate from Leistungsdatum"
-      );
+        vendorRule.usageCount += 1;
+        vendorRule.confidence = Math.min(1, vendorRule.confidence + 0.05);
+
+        memoryUpdates.push(
+          "Reinforced vendor memory: serviceDate from Leistungsdatum"
+        );
+      }
+
+      if (decision === "suggest" && !normalized.serviceDate) {
+        proposedCorrections.push(
+          `SUGGEST — serviceDate may be ${learnedDate} (low confidence vendor rule)`
+        );
+      }
+
+      if (decision === "escalate") {
+        proposedCorrections.push(
+          "ESCALATE — vendor memory uncertain, requires human review"
+        );
+      }
     }
   }
 
-  // Learn if memory does not exist yet
+  // Learn new vendor rule if not exists
   if (!vendorRule && invoice.rawText?.includes("Leistungsdatum")) {
     const match = invoice.rawText.match(
       /Leistungsdatum\s*[:\-]?\s*([\d./-]+)/i
     );
-
-    console.log("MATCH RESULT:", match);
 
     if (match && !normalized.serviceDate) {
       const learnedDate = match[1];
@@ -71,57 +91,82 @@ export function applyAndLearn(invoice: Invoice) {
     }
   }
 
+  // ============================================
+  // 2️⃣ VAT CORRECTION MEMORY — decision engine
+  // ============================================
+
   const vatText = (invoice.rawText || "").toLowerCase();
 
-  const vatPatterns = [
+  const vatIncluded = [
     "vat already included",
     "prices incl. vat",
     "mwst. inkl",
-  ];
+  ].some((p) => vatText.includes(p));
 
-  const vatIncluded = vatPatterns.some((p) => vatText.includes(p));
-
-  // find existing correction rule
   const correctionRule = db.corrections.find(
     (c) => c.field === "taxTotal" && c.pattern === "vat_included"
   );
 
   if (vatIncluded) {
+    const decision = decideFromConfidence(
+      correctionRule ? correctionRule.confidence : 0.6
+    );
+
     const recomputedTax = Number(
       (normalized.netTotal * normalized.taxRate).toFixed(2)
     );
-
     const recomputedGross = Number(
       (normalized.netTotal + recomputedTax).toFixed(2)
     );
 
-    normalized.taxTotal = recomputedTax;
-    normalized.grossTotal = recomputedGross;
+    if (decision === "auto_apply") {
+      normalized.taxTotal = recomputedTax;
+      normalized.grossTotal = recomputedGross;
 
-    proposedCorrections.push(
-      "Adjusted totals because VAT is already included (VAT correction rule)"
-    );
+      proposedCorrections.push(
+        "AUTO — adjusted totals because VAT is already included"
+      );
 
-    if (!correctionRule) {
-      db.corrections.push({
-        id: uuid(),
-        field: "taxTotal",
-        pattern: "vat_included",
-        correction: "recompute totals when VAT included text appears",
-        source: "system",
-        confidence: 0.6,
-        usageCount: 1,
-        updatedAt: new Date().toISOString(),
-      });
+      if (!correctionRule) {
+        db.corrections.push({
+          id: uuid(),
+          field: "taxTotal",
+          pattern: "vat_included",
+          correction: "recompute totals when VAT included text appears",
+          source: "system",
+          confidence: 0.6,
+          usageCount: 1,
+          updatedAt: new Date().toISOString(),
+        });
 
-      memoryUpdates.push("Learned VAT correction rule (Parts AG)");
-    } else {
-      correctionRule.usageCount += 1;
-      correctionRule.confidence = Math.min(1, correctionRule.confidence + 0.05);
+        memoryUpdates.push("Learned VAT correction rule (Parts AG)");
+      } else {
+        correctionRule.usageCount += 1;
+        correctionRule.confidence = Math.min(
+          1,
+          correctionRule.confidence + 0.05
+        );
 
-      memoryUpdates.push("Reinforced VAT correction rule");
+        memoryUpdates.push("Reinforced VAT correction rule");
+      }
+    }
+
+    if (decision === "suggest") {
+      proposedCorrections.push(
+        "SUGGEST — VAT appears included, recommend adjusting totals"
+      );
+    }
+
+    if (decision === "escalate") {
+      proposedCorrections.push(
+        "ESCALATE — VAT rule uncertain, requires human review"
+      );
     }
   }
+
+  // ============================================
+  // AUDIT + SAVE
+  // ============================================
 
   db.auditLog.push({
     step: "apply",
